@@ -1,0 +1,51 @@
+# =============================================================================
+# AMD/ROCm whisper.cpp server for MinusPod (contributed by no84by)
+#
+# fed note: build with  podman build -f Dockerfile.amd -t minuspod/whisper-amd:latest
+#           (or `podman compose -f docker-compose.whisper.amd.yml build`), then
+#           `podman compose -f docker-compose.whisper.amd.yml up -d`.
+#
+# Targets the RX 7900 XTX (gfx1100). MinusPod must share `podcast-net` so it can
+# resolve the `whisper-server` alias:
+#
+#   WHISPER_BACKEND=openai-api
+#   WHISPER_API_BASE_URL=http://whisper-server:8765/v1
+#   WHISPER_DEVICE=cpu
+#
+# whisper.cpp's server is unauthenticated, so we bind 0.0.0.0 inside the container
+# and rely on the shared user network — no port published to the host.
+# =============================================================================
+services:
+  whisper-server:
+    image: minuspod/whisper-amd:latest
+    container_name: whisper-server
+    build:
+      context: .
+      dockerfile: Dockerfile.amd
+      args:
+        AMDGPU_TARGETS: gfx1100
+    restart: unless-stopped
+    # ROCm talks to the card through /dev/kfd; the render node is needed too.
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri/renderD128:/dev/dri/renderD128
+      - /dev/dri/card1:/dev/dri/card1
+    environment:
+      # Set only if ROCm mis-identifies gfx1100; usually unnecessary on ROCm 7.
+      # HSA_OVERRIDE_GFX_VERSION: "11.0.0"
+      HMEMORY_ASYNC_ENABLE: "4"
+    volumes:
+      - ./models:/models:rw
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8765/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks:
+      - podcast-net
+
+networks:
+  podcast-net:
+    driver: bridge
+    name: minuspod-podcast-net

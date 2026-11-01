@@ -1,0 +1,63 @@
+# =============================================================================
+# AMD/ROCm whisper.cpp server  (contributed by no84by)
+#
+# whisper.cpp ships CUDA-only official images. This builds whisper.cpp against
+# AMD HIP/ROCm so an AMD card (e.g. RX 7900 XTX, gfx1100) drives transcription.
+# MinusPod then talks to it as an OpenAI-compatible whisper backend:
+#
+#   WHISPER_BACKEND=openai-api
+#   WHISPER_API_BASE_URL=http://whisper-server:8765/v1
+#   WHISPER_DEVICE=cpu            # the GPU work happens inside this server
+#
+# Run it with the sibling docker-compose.whisper.amd.yml. See
+# docs/wspreads.md for the full fed + MinusPod wiring.
+# =============================================================================
+FROM rocm/rocm:7.1.1 AS build
+
+ARG WHISPER_VERSION=v1.8.1
+ARG AMDGPU_TARGETS=gfx1100
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git cmake build-essential ca-certificates ccache && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+RUN git clone --depth 1 --branch ${WHISPER_VERSION} \
+        https://github.com/ggml-org/whisper.git .
+
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+        -DGGML_HIP=ON \
+        -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
+        -DGGML_CCACHE=ON \
+        -DWHISPER_BUILD_SERVER=ON \
+        -DWHISPER_BUILD_EXAMPLES=OFF \
+        -DWHISPER_BUILD_TESTS=OFF \
+        -DCMAKE_C_COMPILER=/opt/rocm/bin/amdclang \
+        -DCMAKE_CXX_COMPILER=/opt/rocm/bin/amdclang++ \
+        -DCMAKE_PREFIX_PATH=/opt/rocm \
+        -DCMAKE_INSTALL_PREFIX=/app && \
+    cmake --build build --config Release -j"$(nproc)" && \
+    cmake --install build
+
+# Runtime image: needs the ROCm libs + the host /dev/kfd + /dev/dri at runtime.
+FROM rocm/rocm:7.1.1
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && groupadd -r whisper && useradd -r -g whisper whisper
+
+WORKDIR /app
+COPY --from=build /app /app
+ENV PATH="/app/bin:${PATH}"
+
+RUN mkdir -p /models && chown -R whisper:whisper /app /models
+USER whisper
+
+EXPOSE 8765
+# --dtw gives word-level timestamps for precise ad-boundary cutting.
+ENTRYPOINT ["whisper-server"]
+CMD ["--host","0.0.0.0","--port","8765","--model","/models/ggml-large-v3-turbo.bin", \
+     "--inference-path","/v1/audio/transcriptions", \
+     "--threads","8","--processors","1", \
+     "--dtw","large.v3.turbo","--no-flash-attn"]
