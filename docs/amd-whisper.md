@@ -36,9 +36,36 @@ Fed is bare-metal, so `/dev/kfd` is directly mountable.
 cd /srv/personal/minuspod
 podman compose -f docker-compose.whisper.amd.yml build      # ~15-25 min, rocm base ~3GB
 mkdir -p models && cd models && curl -LO \
-  https://huggingface.co/ggml-org/whisper/resolve/main/ggml-large-v3-turbo.bin && cd ..
+  https://huggingface.co/crash-sv/scribe-whisper-turbo-ggml/resolve/main/ggml-large-v3-turbo-q5_0.bin && cd ..
 podman compose -f docker-compose.whisper.amd.yml up -d        # mounts /dev/kfd + /dev/dri
 ```
+
+## CPU benchmark result (01.11.2026)
+
+Verified on fed (AMD Ryzen 9 **7950X3D**, 16c/32t; `libggml-cpu` built with native AVX512+VNNI+Bf16,
+`GGML_NATIVE=ON`). whisper.cpp was rebuilt with `-DWHISPER_BUILD_CLI=ON` — the shipped `main` binary
+was only the deprecation *shim* (prints a warning, exits 1, does no work); the real CLI is `whisper-cli`,
+run here as `bin/whisper-main-cpu` with `LD_LIBRARY_PATH=whisper/build/bin`. Model: **large-v3-turbo
+q5_0** (574 MB) pulled **auth-free** from `crash-sv/scribe-whisper-turbo-ggml`
+(`ggml-large-v3-turbo-q5_0.bin`, sha256 `394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2`,
+verified). Test = 900 s (15 min) 16 kHz mono Huberman WAV. Note: **`-ng` disables GPU** (the `ngl 0`
+equivalent); `-t` thread count is decisive.
+
+| threads | 45 s clip wall | RTF |
+|---|---|---|
+| 1 | 87 s | 0.5× |
+| 4 | 25 s | 1.8× |
+| 8 | 13 s | 3.4× |
+| **16** | **8 s** | **5.6×** ← peak |
+| 32 | 120 s | 0.3× (oversubscription collapse) |
+
+Full 900 s clip at `-t 16`: **144 s → 6.25× real-time**. Transcript clean and accurate, language
+auto-detected `en`.
+
+**Decision:** CPU-first is adequate. A 90 min podcast transcribes in ≈ **16 min wall** at `-t 16` —
+comfortably inside the overnight / scheduled-worker window — so wall-clock does **not** hurt and ROCm
+stays optional + upstream-only, exactly as the advisor mandated. Adopt ROCm only if throughput or
+concurrency (many files at once) ever hurts. Worker default `-t 16`; **never** `-t 32`, which thrashes.
 
 ## Wire MinusPod for the external whisper server (ROCm or CPU whisper.cpp)
 ```
