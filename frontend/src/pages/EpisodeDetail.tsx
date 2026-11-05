@@ -2042,6 +2042,9 @@ function EpisodeDetail() {
                         </ExpandableText>
                       )}
                       {!correction && (
+                        <TeachShowHint segment={segment} rules={showPromoRules} />
+                      )}
+                      {!correction && (
                         <div className="flex flex-col sm:flex-row gap-2 mt-3">
                           <button
                             onClick={() => handleCorrection({ type: 'confirm', originalAd })}
