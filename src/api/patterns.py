@@ -11,7 +11,7 @@ from config import (
     SNIPPET_EXCLUDED_HOLD_REASONS, SNIPPET_EXCLUDED_SQL, SNIPPET_EXCLUDED_SQL_PARAMS,
     SNIPPET_EXCLUDED_STAGE_REASONS,
 )
-from utils.constants import (SHOW_PROMO_CREATED_BY, is_show_promo_candidate,
+from utils.constants import (SHOW_PROMO_CREATED_BY, SHOW_PROMO_DISABLE_REJECTS, is_show_promo_candidate,
                              is_show_promo_category, is_show_promo_pattern,
                              sanitize_sponsor_label, show_promo_floor_problem)
 from utils.markers import clip_merge_spans, find_marker_in_list, parse_ad_markers
@@ -1370,6 +1370,12 @@ def _handle_reject_correction(db, slug, episode_id, original_ad, addressing_mode
             new_count = pattern.get('false_positive_count', 0) + 1
             db.update_ad_pattern(pattern_id, false_positive_count=new_count)
             logger.info(f"Incremented false_positive_count to {new_count} for pattern {pattern_id}")
+            if (is_show_promo_pattern(pattern) and pattern.get('is_active', 1)
+                    and new_count >= SHOW_PROMO_DISABLE_REJECTS
+                    and new_count > (pattern.get('confirmation_count') or 0)):
+                db.update_ad_pattern(pattern_id, is_active=0, disabled_at=utc_now_iso(),
+                                     disabled_reason='auto-disabled after repeated rejects')
+                logger.info(f"Auto-disabled show pattern {pattern_id} after {new_count} rejects")
 
     deleted = db.delete_conflicting_corrections(db.get_podcast_by_slug(slug)['id'], episode_id, 'false_positive', original_start, original_end)
     if deleted:

@@ -251,6 +251,9 @@ def show_promo_floor_problem(category, duration, chars, min_duration, max_durati
 # from "no sponsor" (legacy sponsorless, deleted-sponsor and global rows are not show promos).
 SHOW_PROMO_CREATED_BY = 'show_promo'
 
+# Rejects after which a show pattern whose false positives outnumber its confirmations is disabled.
+SHOW_PROMO_DISABLE_REJECTS = 3
+
 
 def is_show_promo_category(category) -> bool:
     return category in NON_SPONSOR_PATTERN_CATEGORIES

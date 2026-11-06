@@ -23,7 +23,7 @@ from pattern_service import PatternService
 from text_pattern_matcher import TextMatch, TextPatternMatcher, is_show_promo_pattern
 from utils.markers import note_merged_members
 from utils.constants import (LEARNING_SHOW_PROMO_FLOORS, NON_SPONSOR_PATTERN_CATEGORIES,
-                             show_promo_floor_problem)
+                             SHOW_PROMO_DISABLE_REJECTS, show_promo_floor_problem)
 
 SLUG = 'show-promo-test'
 EPISODE_ID = 'abcdef012345'
@@ -435,6 +435,57 @@ def test_confirm_with_pattern_id_credits_a_sponsor_pattern(temp_db):
     row = temp_db.get_ad_pattern_by_id(pid)
     assert row['confirmation_count'] == before + 1
     assert row['false_positive_count'] == 0
+
+
+def _reject(db, pid):
+    from main_app import app
+    with app.app_context():
+        _handle_reject_correction(db, SLUG, EPISODE_ID,
+                                  {'start': 110.0, 'end': 140.0, 'pattern_id': pid})
+
+
+def test_auto_disable_waits_for_the_third_reject(temp_db):
+    _seed(temp_db)
+    pid, _ = _confirm(temp_db, ASK, 'interaction')
+    temp_db.update_ad_pattern(pid, confirmation_count=0)
+    assert SHOW_PROMO_DISABLE_REJECTS == 3
+    for _ in range(SHOW_PROMO_DISABLE_REJECTS - 1):
+        _reject(temp_db, pid)
+    row = temp_db.get_ad_pattern_by_id(pid)
+    assert row['is_active'] == 1 and row['disabled_reason'] is None
+    _reject(temp_db, pid)
+    row = temp_db.get_ad_pattern_by_id(pid)
+    assert row['is_active'] == 0
+    assert row['disabled_reason'] == 'auto-disabled after repeated rejects'
+    assert row['disabled_at']
+
+
+def test_auto_disable_spares_a_pattern_whose_confirmations_keep_up(temp_db):
+    _seed(temp_db)
+    pid, _ = _confirm(temp_db, ASK, 'interaction')
+    temp_db.update_ad_pattern(pid, confirmation_count=5)
+    for _ in range(SHOW_PROMO_DISABLE_REJECTS):
+        _reject(temp_db, pid)
+    row = temp_db.get_ad_pattern_by_id(pid)
+    assert row['false_positive_count'] == SHOW_PROMO_DISABLE_REJECTS
+    assert row['is_active'] == 1
+
+
+def test_auto_disable_does_not_touch_a_sponsor_pattern(temp_db):
+    _seed(temp_db)
+    pid = _sponsor_pattern(temp_db)
+    temp_db.update_ad_pattern(pid, confirmation_count=0)
+    for _ in range(SHOW_PROMO_DISABLE_REJECTS):
+        _reject(temp_db, pid)
+    assert temp_db.get_ad_pattern_by_id(pid)['is_active'] == 1
+
+
+def test_cleanup_ignores_show_promo_patterns(temp_db):
+    _seed(temp_db)
+    pid, _ = _confirm(temp_db, ASK, 'interaction')
+    assert temp_db.get_ad_pattern_by_id(pid)['created_by'] == 'show_promo'
+    assert pid not in {r['id'] for r in temp_db.get_cleanup_stats_rows()}
+    assert pid not in {r['id'] for r in temp_db.get_cleanup_candidate_rows(force=True)}
 
 
 # ----------------------------------------------------------- community export

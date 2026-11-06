@@ -176,6 +176,7 @@ function PatternsPage() {
   const sortedPatterns = useMemo(() => {
     const filtered = patterns?.filter(pattern => {
       if (originFilter === 'user' && pattern.created_by !== 'user') return false;
+      // Show promos (created_by 'show_promo') are not user-made, so they list under Auto.
       if (originFilter === 'auto' && pattern.created_by === 'user') return false;
       if (categoryFilter === UNSET_CATEGORY && pattern.category) return false;
       if (categoryFilter && categoryFilter !== UNSET_CATEGORY
