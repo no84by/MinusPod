@@ -1546,6 +1546,17 @@ def _unanchored_trim_bounds(transcript, original_start, original_end,
     return unanchored
 
 
+def _show_rewrite_floor_problem(db, pattern_id, transcript, adjusted_start, adjusted_end):
+    """Why a trim must not rewrite a show pattern's template, or None (other patterns pass)."""
+    pattern = db.get_ad_pattern_by_id(pattern_id)
+    if not pattern or not is_show_promo_pattern(pattern):
+        return None
+    min_s, max_s = get_pattern_duration_bounds(db)
+    kept = extract_transcript_segment(transcript, adjusted_start, adjusted_end) or ''
+    return show_promo_floor_problem(
+        pattern['category'], adjusted_end - adjusted_start, len(kept), min_s, max_s)
+
+
 def _maybe_rewrite_pattern_from_adjustment(
     db, pattern_service, pattern_id, transcript,
     original_start, original_end, adjusted_start, adjusted_end,
@@ -1588,6 +1599,13 @@ def _maybe_rewrite_pattern_from_adjustment(
                     f"boundary not anchored to a segment edge ({detail}, "
                     f"tolerance {BOUNDARY_SNAP_TOLERANCE_S:.1f}s)"
                 )
+                return
+            floor_problem = _show_rewrite_floor_problem(
+                db, pattern_id, transcript, adjusted_start, adjusted_end)
+            if floor_problem:
+                logger.info(
+                    f"Pattern {pattern_id} rewrite skipped: trimmed show "
+                    f"pattern fails the floors ({floor_problem})")
                 return
             rewritten = pattern_service.rewrite_pattern_from_bounds(
                 pattern_id, transcript,

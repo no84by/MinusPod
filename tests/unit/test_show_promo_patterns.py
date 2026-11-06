@@ -4,6 +4,7 @@ A human confirm (or manual create) of such a marker teaches the show: a
 sponsorless, podcast-scoped text pattern that carries the category. Sponsor
 patterns, floors and prompts are unchanged.
 """
+import json
 import logging
 from unittest.mock import MagicMock
 import pytest
@@ -1083,3 +1084,46 @@ def test_an_over_long_span_with_neither_end_of_the_read_aligned_is_not_cut(temp_
     segments = (_lines(_TALK_BEFORE, 70.0) + _lines(_READ[3:11], 90.0)
                 + _lines(_TALK_AFTER, 112.0))
     assert _match_from_windows(temp_db, pid, segments, 72.0, 128.0) == []
+
+
+# ------------------------------------------- a trimmed confirm rewrites a show pattern only above the floors
+
+def _four_piece_transcript():
+    """ASK split in four lines, each 9 s with a 1 s gap, so a trim lands on a line edge
+    and the head slice is a literal prefix of the stored template."""
+    words = ASK.split()
+    n = len(words) // 4
+    parts = [words[:n], words[n:2 * n], words[2 * n:3 * n], words[3 * n:]]
+    return '\n'.join(
+        f"[{_timed(100.5 + 10 * i)} --> {_timed(109.5 + 10 * i)}] {' '.join(p)}"
+        for i, p in enumerate(parts))
+
+
+def _confirm_show_pattern_trimmed(temp_db, adj_start, adj_end):
+    from main_app import app
+    _seed(temp_db)
+    temp_db.set_setting('min_trim_threshold', '5')
+    pid, _ = _confirm(temp_db, ASK, 'interaction', start=100.0, end=140.0)
+    before = temp_db.get_ad_pattern_by_id(pid)
+    with app.test_request_context():
+        _handle_confirm_correction(
+            temp_db, PatternService(temp_db), SLUG, EPISODE_ID,
+            {'start': 100.0, 'end': 140.0, 'pattern_id': pid},
+            {'adjusted_start': adj_start, 'adjusted_end': adj_end},
+            transcript=_four_piece_transcript())
+    return before, temp_db.get_ad_pattern_by_id(pid)
+
+
+def test_rewrite_of_a_show_pattern_below_the_floor_leaves_the_template(temp_db, caplog):
+    # The kept 10 s is under the 20 s floor, so the shared template must not shrink to it.
+    with caplog.at_level('INFO'):
+        before, after = _confirm_show_pattern_trimmed(temp_db, 130.0, 140.0)
+    assert after['text_template'] == before['text_template']
+    assert 'rewrite skipped' in caplog.text and 'floor' in caplog.text
+
+
+def test_rewrite_of_a_show_pattern_above_the_floor_trims_without_variants(temp_db):
+    before, after = _confirm_show_pattern_trimmed(temp_db, 110.0, 140.0)
+    assert len(after['text_template']) < len(before['text_template'])
+    assert not json.loads(after['intro_variants'] or '[]')
+    assert not json.loads(after['outro_variants'] or '[]')
