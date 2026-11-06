@@ -131,11 +131,8 @@ _INCONCLUSIVE_STAGES = frozenset({
 
 
 def _matches_show_promo_pattern(ad) -> bool:
-    """A text-pattern match of a learned show promo (interaction / self_promo /
-    cross_promo, learned from a human confirm). The reviewer's prompt treats a
-    host's own subscribe ask as show content and would reject it again. The
-    flag is set when the match is made; a merged marker qualifies only when
-    every member it absorbed is a show promo too."""
+    """A learned show promo match (subscribe ask, self-promo, cross-promo); the reviewer would reject it again.
+    A merged marker qualifies only when every member it absorbed is a show promo too."""
     if (ad.get('detection_stage') != 'text_pattern' or ad.get('show_promo') is not True
             or ad.get('merged_distinct_ads')):
         return False

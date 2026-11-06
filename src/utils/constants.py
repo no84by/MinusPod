@@ -224,15 +224,8 @@ LEARNING_MAX_PATTERN_DURATION = 120
 # them teaches the show a sponsorless, podcast-scoped text pattern.
 NON_SPONSOR_PATTERN_CATEGORIES = ('interaction', 'self_promo', 'cross_promo')
 
-# Minimum (duration seconds, text characters) of a sponsorless pattern's span,
-# per category. Sponsor patterns floor at LEARNING_MIN_PATTERN_DURATION (15 s)
-# and MIN_TEXT_LENGTH (50 chars). Without a brand to anchor on, a short generic
-# line ("please subscribe") would match anywhere, so the floors are 1.33x the
-# sponsor duration floor for interaction and self_promo and 2x for cross_promo,
-# which is the category most likely to resemble real show content. The
-# character floor is half of what that duration yields at ~15 characters of
-# speech per second, so a long but mostly silent or musical span fails it.
-# The existing maximum duration (LEARNING_MAX_PATTERN_DURATION) still applies.
+# Minimum (duration seconds, text characters) of a sponsorless pattern span, per category.
+# With no brand to anchor on, a short generic line would match anywhere; the maximum duration still applies.
 LEARNING_SHOW_PROMO_FLOORS = {
     'interaction': (20, 150),
     'self_promo': (20, 150),
@@ -240,10 +233,8 @@ LEARNING_SHOW_PROMO_FLOORS = {
 }
 
 def show_promo_floor_problem(category, duration, chars, min_duration, max_duration):
-    """Why a span cannot become a show pattern, or None. The one rule the
-    confirm path and the manual create path both apply: the configured minimum
-    duration can only raise the category floor, the category's character floor
-    applies, and the existing maximum duration is the ceiling."""
+    """Why a span cannot become a show pattern, or None (shared by the confirm and manual create paths).
+    The configured minimum can only raise the category floor; the existing maximum is the ceiling."""
     floor_s, floor_chars = LEARNING_SHOW_PROMO_FLOORS[category]
     floor_s = max(min_duration, floor_s)
     if duration < floor_s:
@@ -256,9 +247,8 @@ def show_promo_floor_problem(category, duration, chars, min_duration, max_durati
     return None
 
 
-# created_by value of a pattern made through the gated show-promo path. Show
-# promo is a provenance, not something inferred from "no sponsor": legacy
-# sponsorless rows, rows whose sponsor was deleted and global rows are not.
+# created_by of a pattern made through the gated show-promo path: a provenance, not inferred
+# from "no sponsor" (legacy sponsorless, deleted-sponsor and global rows are not show promos).
 SHOW_PROMO_CREATED_BY = 'show_promo'
 
 

@@ -736,10 +736,8 @@ def _create_patterns_from_segments(
                 pattern_service.record_pattern_match(pid, episode_id)
         else:
             if not is_primary_segment and is_show_promo_candidate(seg['sponsor'], category):
-                # A piece with no sponsor in a show-promo category would be
-                # stored without the floors or the podcast-scope rule the show
-                # path applies. It has no span of its own to judge, so it is
-                # refused rather than stored ungated.
+                # No sponsor in a show-promo category: no span of its own to judge, so refuse rather
+                # than store it without the show floors and podcast scope.
                 logger.info(
                     f"Skipping sponsorless {category} piece in auto-split "
                     f"{log_context}: only a whole confirmed read can become a show pattern"
@@ -1097,9 +1095,8 @@ def _resolve_or_create_pattern_from_text(
         return pid, [pid]
 
     sponsor = sponsor_override or original_ad.get('sponsor')
-    # A subscribe ask or promo has no advertiser; a brand scraped out of its
-    # prose ("the app you're listening on") is not one, so only a sponsor the
-    # reviewer or detector named counts for those categories.
+    # A subscribe ask or promo has no advertiser, so only a sponsor the reviewer or detector
+    # named counts for those categories, not a brand scraped from prose.
     scrape_sponsor = not is_show_promo_category(category)
     if not sponsor and label == 'confirmed' and scrape_sponsor:
         reason = original_ad.get('reason', '')
@@ -1293,9 +1290,8 @@ def _handle_confirm_correction(
             if ad_text and len(ad_text) >= 50:
                 pattern_id, _ = _resolve_or_create_pattern_from_text(
                     db, pattern_service, slug, episode_id, ad_text,
-                    # Effective bounds: the duration floor and stored duration
-                    # must describe the text actually learned, not the
-                    # untrimmed detection.
+                    # Effective bounds: the duration floor and stored duration describe the
+                    # text actually learned, not the untrimmed detection.
                     {**original_ad, 'start': eff_start, 'end': eff_end},
                     label='confirmed',
                     sponsor_override=sponsor_override,
