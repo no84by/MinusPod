@@ -410,6 +410,20 @@ describe('Held for review: Dismiss', () => {
     expect(payload.type).toBe('reject');
     expect(mockReprocessEpisode).not.toHaveBeenCalled();
   });
+
+  it('sends the pattern_id of a pattern-matched marker on reject', async () => {
+    const user = userEvent.setup();
+    renderDetail(makeEpisode({
+      hasOriginalAudio: true,
+      pendingReviewMarkers: [{ ...heldMarker, category: 'sponsor', pattern_id: 7 }],
+    }));
+    await user.click(await screen.findByTestId('dismiss-0'));
+    await waitFor(() => expect(mockSubmitCorrection).toHaveBeenCalledTimes(1));
+    const [, , payload] = mockSubmitCorrection.mock.calls[0] as
+      [string, string, { type: string; original_ad: { pattern_id?: number } }];
+    expect(payload.type).toBe('reject');
+    expect(payload.original_ad.pattern_id).toBe(7);
+  });
 });
 
 describe('Held for review: re-detect offer once every held marker is rejected', () => {

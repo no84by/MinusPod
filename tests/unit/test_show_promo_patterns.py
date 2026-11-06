@@ -403,6 +403,39 @@ def test_reject_correction_counts_a_false_positive_and_disable_works(temp_db):
         _later_episode_segments(), podcast_id=SLUG) == []
 
 
+def _sponsor_pattern(db):
+    text = ("This episode is brought to you by Acme, makers of fine widgets "
+            "since 1999, visit acme dot com today for a special discount code.")
+    pid, _ = _confirm(db, text, 'sponsor',
+                      original_ad={'sponsor': 'Acme', 'start': 0.0, 'end': 60.0})
+    assert db.get_ad_pattern_by_id(pid)['sponsor'] == 'Acme'
+    return pid
+
+
+def test_reject_with_pattern_id_penalises_a_sponsor_pattern(temp_db):
+    from main_app import app
+    _seed(temp_db)
+    pid = _sponsor_pattern(temp_db)
+    with app.app_context():
+        _handle_reject_correction(temp_db, SLUG, EPISODE_ID,
+                                  {'start': 0.0, 'end': 60.0, 'pattern_id': pid})
+    assert temp_db.get_ad_pattern_by_id(pid)['false_positive_count'] == 1
+
+
+def test_confirm_with_pattern_id_credits_a_sponsor_pattern(temp_db):
+    from main_app import app
+    _seed(temp_db)
+    pid = _sponsor_pattern(temp_db)
+    before = temp_db.get_ad_pattern_by_id(pid)['confirmation_count']
+    with app.test_request_context():
+        _handle_confirm_correction(
+            temp_db, PatternService(temp_db), SLUG, EPISODE_ID,
+            {'start': 0.0, 'end': 60.0, 'pattern_id': pid}, {})
+    row = temp_db.get_ad_pattern_by_id(pid)
+    assert row['confirmation_count'] == before + 1
+    assert row['false_positive_count'] == 0
+
+
 # ----------------------------------------------------------- community export
 
 def test_community_export_refuses_sponsorless_with_a_clear_reason(temp_db):
