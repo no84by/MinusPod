@@ -1370,9 +1370,11 @@ def _handle_reject_correction(db, slug, episode_id, original_ad, addressing_mode
             new_count = pattern.get('false_positive_count', 0) + 1
             db.update_ad_pattern(pattern_id, false_positive_count=new_count)
             logger.info(f"Incremented false_positive_count to {new_count} for pattern {pattern_id}")
+            # confirmation_count rises on every automatic match, so compare rejects with the matches left standing.
             if (is_show_promo_pattern(pattern) and pattern.get('is_active', 1)
+                    and pattern.get('podcast_id') == slug
                     and new_count >= SHOW_PROMO_DISABLE_REJECTS
-                    and new_count > (pattern.get('confirmation_count') or 0)):
+                    and 2 * new_count > (pattern.get('confirmation_count') or 0)):
                 db.update_ad_pattern(pattern_id, is_active=0, disabled_at=utc_now_iso(),
                                      disabled_reason='auto-disabled after repeated rejects')
                 logger.info(f"Auto-disabled show pattern {pattern_id} after {new_count} rejects")

@@ -669,7 +669,7 @@ describe('Held for review: confirm label names the category', () => {
         promo,                                                             // will teach
         { ...promo, start: 200, end: 230, sponsor: 'Patreon' },            // names a sponsor
         { ...promo, start: 300, end: 310 },                                // under the floor
-        { ...promo, start: 400, end: 430, pattern_id: 9 },                 // already linked
+        { ...promo, start: 400, end: 430, pattern_id: 2 },                 // already linked
         { ...promo, start: 500, end: 530, category: 'sponsor' as const },  // not a promo category
       ],
     }));

@@ -27,7 +27,14 @@ release notes.
   otherwise to the transcript segment), capped near the read's learned
   length, and two learned reads are never merged across the talk between
   them; confirming a span that is mostly a learned read of the same category
-  credits that read instead of learning a longer one.
+  credits that read instead of learning a longer one. Rejects count against
+  the pattern, and on the third reject, when rejects exceed half of its
+  matches, it is disabled.
+
+### Changed
+
+- Confirming or rejecting a marker on the episode page now credits or
+  penalises a sponsor pattern it matched.
 
 ## [2.101.25] - 2026-11-05
 

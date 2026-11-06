@@ -444,31 +444,47 @@ def _reject(db, pid):
                                   {'start': 110.0, 'end': 140.0, 'pattern_id': pid})
 
 
+def _match_then_reject(db, pid, n):
+    """The detector credits every automatic match, so confirmations rise with each one."""
+    ps = PatternService(db)
+    for _ in range(n):
+        ps.record_pattern_match(pid, EPISODE_ID)
+        _reject(db, pid)
+
+
 def test_auto_disable_waits_for_the_third_reject(temp_db):
     _seed(temp_db)
     pid, _ = _confirm(temp_db, ASK, 'interaction')
-    temp_db.update_ad_pattern(pid, confirmation_count=0)
     assert SHOW_PROMO_DISABLE_REJECTS == 3
-    for _ in range(SHOW_PROMO_DISABLE_REJECTS - 1):
-        _reject(temp_db, pid)
+    _match_then_reject(temp_db, pid, SHOW_PROMO_DISABLE_REJECTS - 1)
     row = temp_db.get_ad_pattern_by_id(pid)
     assert row['is_active'] == 1 and row['disabled_reason'] is None
-    _reject(temp_db, pid)
+    _match_then_reject(temp_db, pid, 1)
     row = temp_db.get_ad_pattern_by_id(pid)
     assert row['is_active'] == 0
     assert row['disabled_reason'] == 'auto-disabled after repeated rejects'
     assert row['disabled_at']
 
 
-def test_auto_disable_spares_a_pattern_whose_confirmations_keep_up(temp_db):
+def test_auto_disable_spares_a_pattern_whose_matches_mostly_stand(temp_db):
     _seed(temp_db)
     pid, _ = _confirm(temp_db, ASK, 'interaction')
-    temp_db.update_ad_pattern(pid, confirmation_count=5)
-    for _ in range(SHOW_PROMO_DISABLE_REJECTS):
-        _reject(temp_db, pid)
+    ps = PatternService(temp_db)
+    for _ in range(10):
+        ps.record_pattern_match(pid, EPISODE_ID)
+    _match_then_reject(temp_db, pid, SHOW_PROMO_DISABLE_REJECTS)
     row = temp_db.get_ad_pattern_by_id(pid)
     assert row['false_positive_count'] == SHOW_PROMO_DISABLE_REJECTS
     assert row['is_active'] == 1
+
+
+def test_auto_disable_ignores_a_reject_from_another_show(temp_db):
+    _seed(temp_db)
+    pid, _ = _confirm(temp_db, ASK, 'interaction')
+    temp_db.update_ad_pattern(pid, podcast_id='another-show', confirmation_count=0)
+    for _ in range(SHOW_PROMO_DISABLE_REJECTS):
+        _reject(temp_db, pid)
+    assert temp_db.get_ad_pattern_by_id(pid)['is_active'] == 1
 
 
 def test_auto_disable_does_not_touch_a_sponsor_pattern(temp_db):

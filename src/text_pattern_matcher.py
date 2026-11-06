@@ -522,25 +522,18 @@ class AdPattern:
     category: str | None = None  # Segment category (#565); None on a legacy/unmigrated row
     created_by: str | None = None  # 'user', 'auto', 'community'; feeds is_defined_pattern
 
+    @property
+    def is_defined(self) -> bool:
+        return is_defined_pattern({'created_by': self.created_by, 'source': self.source})
+
     # Decided once when the pattern is loaded, not per match. A show promo is never tier-1
     # (created_by is not 'user'), so a feed's keep/mark action for its category still wins.
-    is_defined: bool = field(init=False, default=False)
     is_show_promo: bool = field(init=False, default=False)
 
     def __post_init__(self):
-        self.is_defined = is_defined_pattern(
-            {'created_by': self.created_by, 'source': self.source})
         self.is_show_promo = is_show_promo_pattern(
             {'created_by': self.created_by, 'scope': self.scope,
              'sponsor_id': self.sponsor_id, 'category': self.category})
-
-
-def _pattern_match(pattern: AdPattern, **fields) -> TextMatch:
-    """A TextMatch for `pattern`, carrying the pattern's identity, label and trust
-    flags so no match site copies them by hand."""
-    return TextMatch(
-        pattern_id=pattern.id, sponsor=pattern.sponsor, category=pattern.category,
-        defined=pattern.is_defined, show_promo=pattern.is_show_promo, **fields)
 
 
 def get_pattern_duration_bounds(db) -> tuple[int, int]:
@@ -1089,12 +1082,16 @@ class TextPatternMatcher:
                         start_pos, end_pos, segment_map, segments
                     )
 
-                    matches.append(_pattern_match(
-                        pattern,
+                    matches.append(TextMatch(
+                        pattern_id=pattern.id,
                         start=start_time,
                         end=end_time,
                         confidence=float(best_score),
+                        sponsor=pattern.sponsor,
                         match_type="content",
+                        category=pattern.category,
+                        defined=pattern.is_defined,
+                        show_promo=pattern.is_show_promo,
                     ))
 
         window_bounds = []
@@ -1164,13 +1161,17 @@ class TextPatternMatcher:
                         end_time = (self._estimate_end_from_duration(pattern, start_time)
                                     if span_estimated else scanned_end)
 
-                        matches.append(_pattern_match(
-                            pattern,
+                        matches.append(TextMatch(
+                            pattern_id=pattern.id,
                             start=start_time,
                             end=end_time,
                             confidence=best_score / 100,
+                            sponsor=pattern.sponsor,
                             match_type="intro",
+                            category=pattern.category,
                             matched_text=matched,
+                            defined=pattern.is_defined,
+                            show_promo=pattern.is_show_promo,
                             span_estimated=span_estimated,
                             text_start=start_time,
                             text_end=intro_text_end if span_estimated else end_time,
@@ -1200,13 +1201,17 @@ class TextPatternMatcher:
                         start_time = (self._estimate_start_from_duration(pattern, end_time)
                                       if span_estimated else scanned_start)
 
-                        matches.append(_pattern_match(
-                            pattern,
+                        matches.append(TextMatch(
+                            pattern_id=pattern.id,
                             start=start_time,
                             end=end_time,
                             confidence=best_score / 100,
+                            sponsor=pattern.sponsor,
                             match_type="outro",
+                            category=pattern.category,
                             matched_text=matched,
+                            defined=pattern.is_defined,
+                            show_promo=pattern.is_show_promo,
                             span_estimated=span_estimated,
                             text_start=outro_text_start if span_estimated else start_time,
                             text_end=end_time,
@@ -1731,7 +1736,7 @@ class TextPatternMatcher:
                 changed = new_start != match.start or new_end != match.end
                 if changed:
                     logger.info(
-                        f"Refined text match {match.start:.1f}-{match.end:.1f}s: "
+                        f"Refined text match {match.start:.1f}-{match.end:.1f}s -> "
                         f"{new_start:.1f}-{new_end:.1f}s via intro/outro phrase"
                     )
                 refined.append(replace(
