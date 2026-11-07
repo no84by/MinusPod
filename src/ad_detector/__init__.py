@@ -100,6 +100,7 @@ from ad_detector.keep_content import CONTENT_SYSTEM_PROMPT, invert_content_to_ad
 from llm_capabilities import PASS_AD_DETECTION_1, PASS_AD_DETECTION_2
 from sponsor_service import SponsorService
 from text_pattern_matcher import is_defined_pattern
+from transcript_loop import drop_loop_cues
 from text_recurrence import format_recurrence_hint
 from utils.constants import (
     INVALID_SPONSOR_VALUES,
@@ -2502,7 +2503,7 @@ class AdDetector:
             try:
                 logger.info(f"[{slug}:{episode_id}] Stage 2: Text pattern matching")
                 text_matches = self.text_pattern_matcher.find_matches(
-                    segments,
+                    drop_loop_cues(segments),
                     podcast_id=podcast_id,
                     podcast_tags=podcast_tags,
                     language=get_pattern_language(self.db, slug=slug),

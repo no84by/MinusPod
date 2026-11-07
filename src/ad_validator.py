@@ -28,7 +28,7 @@ from config import (
     CUE_ONLY_SAFETY_HOLD_NEW, CUE_ONLY_SAFETY_AUTO_CUT,
     CUE_ONLY_AUTOCUT_CONFIDENCE,
     HOLD_REASON_CUE_TEMPLATE_UNPROVEN, HOLD_REASON_CUE_LOW_CONFIDENCE,
-    HOLD_REASON_LARGE_VAD_GAP, HOLD_REASON_NO_TRANSCRIPT_EVIDENCE,
+    HOLD_REASON_LARGE_VAD_GAP, HOLD_REASON_NO_TRANSCRIPT_EVIDENCE, HOLD_REASON_TRANSCRIPT_LOOP,
     EVIDENCE_GATE_DAI_CORE_MIN_COVERAGE, measured_evidence, repair_segment_category,
     MAX_ADJACENT_AUTO_EXTENSION_SECONDS, MERGE_GAP_SECONDS, is_pending_review,
     REVIEWER_REJECT_PRESERVED_FLAG, is_keep_like,
@@ -67,6 +67,7 @@ from utils.markers import (
 from differential_fetcher import differential_region_overlapping, identical_coverage
 from community_export import brand_match_candidates
 from text_pattern_matcher import AD_TRANSITION_PHRASES, bounded_segment_texts
+from transcript_loop import LOOP_MIN_COVERAGE, drop_loop_cues, find_loop_runs, loop_coverage
 from sponsor_context import (BARE_LINK_RE, BRAND_LINK_RE, COMMERCIAL_CONTEXT_RE, CTA_LINK_RE,
                              SPONSOR_FRAMING_RE, SPONSOR_IS_SPONSOR_RE, SPONSOR_MIN_MENTIONS,
                              SPONSOR_THANKS_RE, VANITY_LINK_RE, description_sponsor_re,
@@ -409,6 +410,10 @@ class AdValidator:
         self._show_key = squash_brand(podcast_name or '')
         self.episode_duration = episode_duration
         self.segments = segments or []
+        # Loop cues are no transcript evidence: marker text lookups skip them.
+        self._loop_runs = find_loop_runs(self.segments)
+        for lo, hi, n in self._loop_runs:
+            logger.info(f"Transcript loop: {n} near-identical cues over {lo:.1f}-{hi:.1f}s")
         self.episode_description = episode_description or ""
         self._description_sponsor_re = description_sponsor_re(self.episode_description)
         self.false_positive_corrections = false_positive_corrections or []
@@ -525,8 +530,11 @@ class AdValidator:
         return (show in squashed
                 or (len(words) >= 3 and show.startswith(squashed)))
 
+    def _evidence_segments(self) -> list[dict]:
+        return drop_loop_cues(self.segments, self._loop_runs) if self._loop_runs else self.segments
+
     def _bounded_text_segments(self, ad: dict) -> list[str]:
-        return bounded_segment_texts(self.segments, ad['start'], ad['end'])
+        return bounded_segment_texts(self._evidence_segments(), ad['start'], ad['end'])
 
     def _names_sponsor(self, text: str, sponsor: str) -> bool:
         name_re = _sponsor_name_re(sponsor)
@@ -1415,7 +1423,7 @@ class AdValidator:
 
         Delegates to utils.text.extract_text_from_segments.
         """
-        return extract_text_from_segments(self.segments, start, end)
+        return extract_text_from_segments(self._evidence_segments(), start, end)
 
     def _make_decision(self, confidence: float, flags: list[str],
                         duration: float = 0.0) -> Decision:
@@ -1465,6 +1473,12 @@ class AdValidator:
         # arbitrarily large untranscribed span. This safety marker is stamped
         # before validation so it cannot merge into the neighboring ad, then
         # re-derived here before generic duration holds choose another reason.
+        # A span mostly inside a Whisper loop has no real transcript to judge it by.
+        if (decision != Decision.REJECT
+                and loop_coverage(self._loop_runs, ad['start'], ad['end']) >= LOOP_MIN_COVERAGE):
+            self._mark_held(ad, flags, HOLD_REASON_TRANSCRIPT_LOOP)
+            return Decision.REVIEW
+
         if (ad.get('detection_stage') == 'vad_gap'
                 and ad.get('vad_gap_requires_review')):
             self._mark_held(ad, flags, HOLD_REASON_LARGE_VAD_GAP)
