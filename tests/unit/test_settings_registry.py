@@ -68,6 +68,7 @@ SEED_SNAPSHOT = {
     'ad_chapter_min_confidence': '0.9',
     'community_sync_categories': DEFAULT_COMMUNITY_SYNC_CATEGORIES_JSON,
     'detect_show_segments': '0',
+    'snip_short_asks': '0',
     'seed_sponsors_detection': 'true',
     'seed_sponsors_verification': 'true',
     'seed_sponsors_reviewer': 'true',
@@ -567,11 +568,12 @@ class TestGetDefaults:
         # whatsNewOnUpgrade added after that (175 -> 176).
         # reviewLinksInNotes added after that (176 -> 177).
         # feedItunesBlock added after that (177 -> 178).
+        # snipShortAsks added after that (178 to 179).
         payload_keys = {
             spec.payload_key for spec in SETTINGS_REGISTRY.values()
             if spec.payload_key
         }
-        assert len(payload_keys) == 178
+        assert len(payload_keys) == 179
         assert 'systemoneBaseUrl' in payload_keys
         assert 'failoverWhisperMaxAttempts' in payload_keys
         assert 'audioCuePairOrientWindowSeconds' not in payload_keys

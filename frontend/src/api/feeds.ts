@@ -544,6 +544,7 @@ export interface UpdateFeedPayload {
   // map (not just the changed key); null clears every override.
   segmentCategoryActions?: Partial<Record<SegmentCategory, SegmentAction>> | null;
   detectShowSegments?: boolean | null;
+  snipShortAsks?: boolean | null;
   ownEpisodeGuids?: boolean | null;
   skipSecondPass?: boolean | null;
   transcriptDifferential?: boolean | null;

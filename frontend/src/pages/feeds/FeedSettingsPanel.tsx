@@ -1571,6 +1571,37 @@ function FeedSettingsPanel({ feed, slug }: Props) {
                 </div>
               </div>
 
+              {/* Short host asks: tri-state, inheriting the global snipShortAsks default. */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 text-sm pt-2 border-t border-border">
+                <div className="min-w-0">
+                  <span className="text-muted-foreground block">Short host asks</span>
+                  <span className="text-xs text-muted-foreground/70 block">
+                    Cuts spoken subscribe and rating asks, self-promotion and sponsor thank-yous
+                    of 2 to 40 seconds, on sentence edges only.
+                  </span>
+                </div>
+                <div className="flex flex-col items-start sm:items-end gap-1">
+                  <SegmentedToggle
+                    value={feed.snipShortAsks == null ? 'inherit' : feed.snipShortAsks ? 'on' : 'off'}
+                    options={[
+                      { value: 'inherit', label: 'Inherit' },
+                      { value: 'on', label: 'On' },
+                      { value: 'off', label: 'Off' },
+                    ]}
+                    onChange={(v) => updateMutation.mutate({
+                      snipShortAsks: v === 'inherit' ? null : v === 'on',
+                    })}
+                    disabled={updateMutation.isPending}
+                    ariaLabel="Remove short host asks and sponsor thanks"
+                  />
+                  {feed.snipShortAsks == null && (
+                    <p className="text-xs text-muted-foreground">
+                      Following the global setting (currently {(settings?.snipShortAsks?.value ?? false) ? 'on' : 'off'}).
+                    </p>
+                  )}
+                </div>
+              </div>
+
               {/* Bulk re-render (issue #565): apply the current segment
                   actions to every already-processed episode. */}
               <div className="pt-2 border-t border-border flex flex-col gap-2">

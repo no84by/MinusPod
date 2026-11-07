@@ -55,6 +55,7 @@ from utils.prompt import (
     format_detection_notes_block, scrub_description, strip_comments_from_prompt
 )
 from utils.text import most_mentioned, truncate, word_boundary_re
+from utils.short_asks import stamp_short_ask
 from utils.time import overlap_ratio, ranges_overlap
 
 from config import (
@@ -109,6 +110,7 @@ from utils.constants import (
     mentions_advertising,
     PATTERN_EVIDENCE_MAX_CHARS,
     sanitize_sponsor_label,
+    SHORT_ASKS_PROMPT_SECTION,
     SHOW_SEGMENTS_PROMPT_SECTION,
 )
 
@@ -1078,6 +1080,16 @@ class AdDetector:
             logger.warning(f"Could not check detect_show_segments for {slug}: {e}")
             return False
 
+    def _podcast_wants_short_asks(self, slug: str) -> bool:
+        """Whether this podcast opted into removing short host asks (snip_short_asks)."""
+        if not slug or not self.db:
+            return False
+        try:
+            return self.db.resolve_snip_short_asks(slug)
+        except Exception as e:
+            logger.warning(f"Could not check snip_short_asks for {slug}: {e}")
+            return False
+
     def _window_ad_cap(self, slug, override):
         """Longest single window detection kept: the caller's override, else the feed's resolved cap."""
         if override is not None or not slug or not self.db:
@@ -1188,6 +1200,8 @@ class AdDetector:
         prompt = self.get_system_prompt()
         if self._podcast_wants_show_segments(slug):
             prompt = f"{prompt}\n\n{SHOW_SEGMENTS_PROMPT_SECTION}"
+        if self._podcast_wants_short_asks(slug):
+            prompt = f"{prompt}\n\n{SHORT_ASKS_PROMPT_SECTION}"
         if addressing_mode == 'segment_ids':
             prompt = f"{prompt}{SEGMENT_ID_SYSTEM_SECTION}"
         return f"{prompt}{AD_QUOTE_ANCHOR_SECTION}"
@@ -1371,7 +1385,8 @@ class AdDetector:
             slug=slug, episode_id=episode_id,
             window_label=window_label,
             pass_name=pass_name,
-            response_schema=ad_detection_json_schema(addressing_mode),
+            response_schema=ad_detection_json_schema(
+                addressing_mode, short_ask=SHORT_ASKS_PROMPT_SECTION in system_prompt),
         )
         if response is None:
             logger.error(
@@ -1500,7 +1515,9 @@ class AdDetector:
         # and freezes the reviewer's boundary trims (issue #750).
         llm_stage = ('verification' if pass_name == PASS_AD_DETECTION_2
                      else 'claude')
+        short_asks_on = SHORT_ASKS_PROMPT_SECTION in system_prompt
         for ad in valid_window_ads:
+            stamp_short_ask(ad, short_asks_on)
             ad.setdefault('detection_stage', llm_stage)
             # Mode is drawn per pass, so stamp per ad; llm_* are the pre-snap bounds.
             ad.setdefault('addressing_mode', addressing_mode)

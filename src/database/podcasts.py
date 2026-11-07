@@ -380,7 +380,7 @@ class PodcastMixin:
                 'website_url', 'passthrough_enabled', 'skip_ad_detection',
                 'last_podping_at', 'podping_uses', 'podping_hive_accounts',
                 'podping_checked_at', 'channel_metadata_at',
-                'segment_category_actions', 'detect_show_segments',
+                'segment_category_actions', 'detect_show_segments', 'snip_short_asks',
                 'skip_second_pass', 'transcript_differential',
                 'skip_transcription', 'cue_only_safety',
                 'queue_priority', 'title_skip_patterns', 'description_skip_patterns',
@@ -758,6 +758,16 @@ class PodcastMixin:
         if per_feed is not None:
             return bool(per_feed)
         return coerce_bool_setting(self.get_setting('detect_show_segments'))
+
+    def resolve_snip_short_asks(self, slug: str,
+                                podcast: dict | None = None) -> bool:
+        """Per-feed snip_short_asks if non-NULL (0=off, 1=on), else the global setting."""
+        if podcast is None:
+            podcast = self.get_podcast_by_slug(slug)
+        per_feed = podcast.get('snip_short_asks') if podcast else None
+        if per_feed is not None:
+            return bool(per_feed)
+        return coerce_bool_setting(self.get_setting('snip_short_asks'))
 
     def resolve_retention_days(self, slug: str,
                                podcast: dict | None = None) -> int:

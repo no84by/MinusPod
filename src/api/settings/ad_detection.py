@@ -656,6 +656,11 @@ def _apply_processing_flags(db, data):
         db.set_setting('detect_show_segments', value, is_default=False)
         logger.info(f"Updated detect-show-segments default to: {value}")
 
+    if 'snipShortAsks' in data:
+        value = 'true' if data['snipShortAsks'] else 'false'
+        db.set_setting('snip_short_asks', value, is_default=False)
+        logger.info(f"Updated snip-short-asks default to: {value}")
+
     if 'textRecurrenceHints' in data:
         value = 'true' if data['textRecurrenceHints'] else 'false'
         db.set_setting('text_recurrence_hints', value, is_default=False)
